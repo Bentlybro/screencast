@@ -83,7 +83,7 @@ private fun SearchingContent() {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Looking for DLNA TVs and Miracast displays",
+            text = "Looking for DLNA TVs, Chromecasts, and Miracast displays",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -154,6 +154,7 @@ private fun DeviceList(
         
         // Group devices by type
         val dlnaDevices = devices.filter { it.type == DeviceType.DLNA }
+        val chromecastDevices = devices.filter { it.type == DeviceType.CHROMECAST }
         val miracastDevices = devices.filter { it.type == DeviceType.MIRACAST }
         
         if (dlnaDevices.isNotEmpty()) {
@@ -173,12 +174,29 @@ private fun DeviceList(
             }
         }
         
+        if (chromecastDevices.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Chromecast",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                )
+            }
+            items(chromecastDevices, key = { it.id }) { device ->
+                DeviceCard(
+                    device = device,
+                    onClick = { onDeviceClick(device) }
+                )
+            }
+        }
+        
         if (miracastDevices.isNotEmpty()) {
             item {
                 Text(
                     text = "Miracast / WiFi Direct",
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                 )
             }

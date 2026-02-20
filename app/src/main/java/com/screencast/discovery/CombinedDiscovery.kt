@@ -7,23 +7,26 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Combines multiple discovery methods (DLNA + Miracast) into a single flow.
+ * Combines multiple discovery methods (DLNA + Miracast + Chromecast) into a single flow.
  */
 @Singleton
 class CombinedDiscovery @Inject constructor(
     private val ssdpDiscovery: SSDPDiscovery,
-    private val miracastDiscovery: MiracastDiscovery
+    private val miracastDiscovery: MiracastDiscovery,
+    private val chromecastDiscovery: ChromecastDiscovery
 ) : DeviceDiscovery {
 
     override fun discover(): Flow<Device> {
         return merge(
             ssdpDiscovery.discover(),
-            miracastDiscovery.discover()
+            miracastDiscovery.discover(),
+            chromecastDiscovery.discoverDevices()
         )
     }
 
     override fun stop() {
         ssdpDiscovery.stop()
+        chromecastDiscovery.stopDiscovery()
     }
 
     /**

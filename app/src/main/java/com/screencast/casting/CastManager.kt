@@ -6,6 +6,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.util.Log
 import com.screencast.capture.ScreenCapture
+import com.screencast.casting.chromecast.ChromecastController
 import com.screencast.casting.dlna.DLNAController
 import com.screencast.data.SettingsRepository
 import com.screencast.discovery.CombinedDiscovery
@@ -30,6 +31,7 @@ import javax.inject.Singleton
 class CastManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dlnaController: DLNAController,
+    private val chromecastController: ChromecastController,
     private val combinedDiscovery: CombinedDiscovery,
     private val settingsRepository: SettingsRepository
 ) {
@@ -85,8 +87,8 @@ class CastManager @Inject constructor(
             // Get quality settings
             val quality = settingsRepository.quality.first()
 
-            // Start streaming server (needed for DLNA)
-            if (device.type == DeviceType.DLNA) {
+            // Start streaming server (needed for DLNA and Chromecast)
+            if (device.type == DeviceType.DLNA || device.type == DeviceType.CHROMECAST) {
                 streamingServer = StreamingServer(STREAM_PORT).apply {
                     start()
                 }
@@ -152,7 +154,11 @@ class CastManager @Inject constructor(
                     DeviceType.MIRACAST -> {
                         combinedDiscovery.disconnectMiracast { }
                     }
-                    else -> { /* TODO: Handle other types */ }
+                    DeviceType.CHROMECAST -> {
+                        chromecastController.stopCasting()
+                        chromecastController.disconnect()
+                    }
+                    else -> { /* Unsupported */ }
                 }
             }
         }
@@ -209,10 +215,31 @@ class CastManager @Inject constructor(
     }
 
     private suspend fun connectChromecast(device: Device, streamUrl: String?): Boolean {
-        // TODO: Implement Chromecast connection
-        // This requires Google Cast SDK
-        Log.w(TAG, "Chromecast not yet implemented")
-        return false
+        if (streamUrl == null) {
+            Log.e(TAG, "Stream URL required for Chromecast")
+            return false
+        }
+        
+        // Connect to Chromecast
+        if (!chromecastController.connect(device.address)) {
+            Log.e(TAG, "Failed to connect to Chromecast")
+            return false
+        }
+        
+        // Start heartbeat to keep connection alive
+        scope.launch {
+            while (_castState.value is CastState.Casting || _castState.value is CastState.Connecting) {
+                delay(3000)
+                chromecastController.sendHeartbeat()
+            }
+        }
+        
+        // Start casting
+        val success = chromecastController.startCasting(streamUrl)
+        if (success) {
+            Log.d(TAG, "Chromecast connection established")
+        }
+        return success
     }
 
     private fun startConnectionMonitor(device: Device) {
