@@ -20,14 +20,6 @@
         android:fillColor="#7C4DFF"
         android:pathData="M36,44h36v18H36z"/>
     
-    <!-- Cast waves -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,48c0,0 4,4 4,8s-4,8 -4,8"
-        android:strokeWidth="2"
-        android:strokeColor="#FFFFFF"
-        android:fillColor="@android:color/transparent"/>
-    
     <!-- Stand -->
     <path
         android:fillColor="#FFFFFF"
