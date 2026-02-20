@@ -1,5 +1,7 @@
 package com.screencast.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +25,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     
     Scaffold(
         topBar = {
@@ -43,19 +46,21 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // Quality Settings Section
-            SettingsSection(title = "Quality") {
+            SettingsSection(title = "Streaming Quality") {
                 QualitySelector(
                     selectedQuality = uiState.quality,
                     onQualitySelected = { viewModel.setQuality(it) }
                 )
             }
             
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
             // About Section
             SettingsSection(title = "About") {
                 SettingsItem(
                     icon = Icons.Default.Info,
                     title = "Version",
-                    subtitle = BuildConfig.VERSION_NAME
+                    subtitle = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
                 )
                 
                 SettingsItem(
@@ -63,7 +68,7 @@ fun SettingsScreen(
                     title = "Check for updates",
                     subtitle = when {
                         uiState.isCheckingUpdate -> "Checking..."
-                        uiState.updateAvailable != null -> "Update available: ${uiState.updateAvailable}"
+                        uiState.updateAvailable != null -> "Update available: v${uiState.updateAvailable}"
                         else -> "You're up to date"
                     },
                     onClick = { viewModel.checkForUpdate() }
@@ -73,9 +78,79 @@ fun SettingsScreen(
                     icon = Icons.Default.Code,
                     title = "Source code",
                     subtitle = "github.com/Bentlybro/screencast",
-                    onClick = { /* Open GitHub */ }
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Bentlybro/screencast"))
+                        context.startActivity(intent)
+                    }
+                )
+                
+                SettingsItem(
+                    icon = Icons.Default.BugReport,
+                    title = "Report an issue",
+                    subtitle = "Found a bug? Let us know!",
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Bentlybro/screencast/issues/new"))
+                        context.startActivity(intent)
+                    }
                 )
             }
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Help Section
+            SettingsSection(title = "Help") {
+                SettingsItem(
+                    icon = Icons.Default.Help,
+                    title = "How to use",
+                    subtitle = "Tips for casting your screen"
+                )
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "For DLNA/Smart TVs:",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "• Make sure your phone and TV are on the same WiFi network\n• The TV should appear automatically in the device list",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = "For Miracast:",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "• Enable WiFi Direct/Miracast on your TV\n• Grant location permission for device discovery\n• Select your TV from the Miracast section",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Footer
+            Text(
+                text = "Made with ❤️ for Colton",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .wrapContentWidth(Alignment.CenterHorizontally)
+            )
         }
     }
 }
@@ -127,6 +202,13 @@ private fun SettingsItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (onClick != null) {
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -149,7 +231,7 @@ private fun QualitySelector(
                     onClick = { onQualitySelected(quality) }
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = quality.label,
                         style = MaterialTheme.typography.bodyLarge
@@ -158,6 +240,22 @@ private fun QualitySelector(
                         text = quality.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                // Quality indicator badge
+                Surface(
+                    color = when (quality) {
+                        Quality.LOW -> MaterialTheme.colorScheme.tertiaryContainer
+                        Quality.MEDIUM -> MaterialTheme.colorScheme.secondaryContainer
+                        Quality.HIGH -> MaterialTheme.colorScheme.primaryContainer
+                    },
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        text = "${quality.bitrate / 1_000_000} Mbps",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -172,7 +270,7 @@ enum class Quality(
     val height: Int,
     val bitrate: Int
 ) {
-    LOW("Low", "720p @ 2 Mbps - Better for slow networks", 1280, 720, 2_000_000),
-    MEDIUM("Medium", "1080p @ 4 Mbps - Balanced", 1920, 1080, 4_000_000),
-    HIGH("High", "1080p @ 8 Mbps - Best quality", 1920, 1080, 8_000_000)
+    LOW("Low", "720p - Better for slow networks", 1280, 720, 2_000_000),
+    MEDIUM("Medium", "1080p - Balanced quality", 1920, 1080, 4_000_000),
+    HIGH("High", "1080p - Best quality", 1920, 1080, 8_000_000)
 }
