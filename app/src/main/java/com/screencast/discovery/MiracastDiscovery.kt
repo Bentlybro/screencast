@@ -35,7 +35,7 @@ class MiracastDiscovery @Inject constructor(
     }
 
     private var manager: WifiP2pManager? = null
-    private var channel: WifiP2pManager.Channel? = null
+    private var p2pChannel: WifiP2pManager.Channel? = null
     private var receiver: BroadcastReceiver? = null
     private var isDiscovering = false
 
@@ -58,7 +58,7 @@ class MiracastDiscovery @Inject constructor(
             return@callbackFlow
         }
 
-        channel = manager?.initialize(context, Looper.getMainLooper()) { 
+        p2pChannel = manager?.initialize(context, Looper.getMainLooper()) { 
             Log.d(TAG, "WiFi P2P channel disconnected")
         }
 
@@ -135,7 +135,7 @@ class MiracastDiscovery @Inject constructor(
     private fun startDiscovery() {
         if (isDiscovering) return
         
-        manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+        manager?.discoverPeers(p2pChannel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Log.d(TAG, "P2P discovery started")
                 isDiscovering = true
@@ -157,7 +157,7 @@ class MiracastDiscovery @Inject constructor(
     private fun stopDiscovery() {
         if (!isDiscovering) return
         
-        manager?.stopPeerDiscovery(channel, object : WifiP2pManager.ActionListener {
+        manager?.stopPeerDiscovery(p2pChannel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Log.d(TAG, "P2P discovery stopped")
                 isDiscovering = false
@@ -171,7 +171,7 @@ class MiracastDiscovery @Inject constructor(
 
     @Suppress("MissingPermission")
     private fun requestPeers(callback: (List<Device>) -> Unit) {
-        manager?.requestPeers(channel) { peers: WifiP2pDeviceList? ->
+        manager?.requestPeers(p2pChannel) { peers: WifiP2pDeviceList? ->
             val devices = peers?.deviceList?.mapNotNull { p2pDevice ->
                 // Filter for display-capable devices
                 if (isDisplayCapable(p2pDevice)) {
@@ -219,7 +219,7 @@ class MiracastDiscovery @Inject constructor(
             groupOwnerIntent = 0
         }
 
-        manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+        manager?.connect(p2pChannel, config, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Log.d(TAG, "P2P connection initiated to ${device.name}")
                 callback(true)
@@ -237,7 +237,7 @@ class MiracastDiscovery @Inject constructor(
      */
     @Suppress("MissingPermission")
     fun disconnect(callback: (Boolean) -> Unit) {
-        manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
+        manager?.removeGroup(p2pChannel, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 Log.d(TAG, "P2P disconnected")
                 callback(true)
