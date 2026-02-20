@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.screencast.BuildConfig
 
@@ -27,6 +28,46 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     
+    // Download progress dialog
+    if (uiState.isDownloading) {
+        Dialog(onDismissRequest = { /* Can't dismiss while downloading */ }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Downloading update...",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LinearProgressIndicator(
+                        progress = { uiState.downloadProgress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${(uiState.downloadProgress * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
+    
+    // Error snackbar
+    uiState.error?.let { error ->
+        LaunchedEffect(error) {
+            // Auto-clear error after showing
+            kotlinx.coroutines.delay(3000)
+            viewModel.clearError()
+        }
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -37,6 +78,15 @@ fun SettingsScreen(
                     }
                 }
             )
+        },
+        snackbarHost = {
+            uiState.error?.let { error ->
+                Snackbar(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(error)
+                }
+            }
         }
     ) { padding ->
         Column(
@@ -63,15 +113,23 @@ fun SettingsScreen(
                     subtitle = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
                 )
                 
+                // Update check/download item
+                val updateInfo = uiState.updateAvailable
                 SettingsItem(
-                    icon = Icons.Default.Update,
-                    title = "Check for updates",
+                    icon = if (updateInfo != null) Icons.Default.Download else Icons.Default.Update,
+                    title = if (updateInfo != null) "Download update" else "Check for updates",
                     subtitle = when {
                         uiState.isCheckingUpdate -> "Checking..."
-                        uiState.updateAvailable != null -> "Update available: v${uiState.updateAvailable}"
+                        updateInfo != null -> "v${updateInfo.versionName} available - Tap to install"
                         else -> "You're up to date"
                     },
-                    onClick = { viewModel.checkForUpdate() }
+                    onClick = {
+                        if (updateInfo != null) {
+                            viewModel.downloadAndInstallUpdate()
+                        } else {
+                            viewModel.checkForUpdate()
+                        }
+                    }
                 )
                 
                 SettingsItem(
