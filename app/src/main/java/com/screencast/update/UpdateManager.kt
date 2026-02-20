@@ -176,17 +176,23 @@ class UpdateManager @Inject constructor(
 
     /**
      * Parse version string to version code.
-     * Assumes format like "1.2.3" -> 10203
+     * Handles formats like "1.2.3", "1.2.3-beta", "1.0.0-rc1" -> numeric code
      */
     private fun parseVersionCode(version: String): Int {
         return try {
-            val parts = version.split(".").map { it.toInt() }
+            // Remove any suffix like -beta, -rc1, etc
+            val cleanVersion = version.replace(Regex("-.*$"), "")
+            val parts = cleanVersion.split(".").map { 
+                // Also handle cases like "1a" -> "1"
+                it.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0
+            }
             when (parts.size) {
                 1 -> parts[0] * 10000
                 2 -> parts[0] * 10000 + parts[1] * 100
-                else -> parts[0] * 10000 + parts[1] * 100 + parts[2]
+                else -> parts[0] * 10000 + parts[1] * 100 + parts.getOrElse(2) { 0 }
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse version: $version", e)
             0
         }
     }
