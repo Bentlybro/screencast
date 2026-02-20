@@ -31,14 +31,21 @@ class SSDPDiscovery @Inject constructor(
         private const val TAG = "SSDPDiscovery"
         private const val SSDP_ADDRESS = "239.255.255.250"
         private const val SSDP_PORT = 1900
-        private const val DISCOVERY_TIMEOUT_MS = 5000
-        private const val SOCKET_TIMEOUT_MS = 3000
+        private const val DISCOVERY_TIMEOUT_MS = 15000  // Increased to 15 seconds
+        private const val SOCKET_TIMEOUT_MS = 5000
         
-        // Search for MediaRenderer devices (TVs, speakers, etc.)
+        // Search for various device types
         private val SEARCH_TARGETS = listOf(
+            "ssdp:all",  // Find ALL UPnP devices
+            "upnp:rootdevice",  // All root devices
             "urn:schemas-upnp-org:device:MediaRenderer:1",
+            "urn:schemas-upnp-org:device:MediaRenderer:2",
             "urn:schemas-upnp-org:service:AVTransport:1",
-            "urn:dial-multiscreen-org:service:dial:1" // For smart TVs
+            "urn:schemas-upnp-org:service:RenderingControl:1",
+            "urn:dial-multiscreen-org:service:dial:1",  // DIAL (Netflix, YouTube casting)
+            "urn:schemas-upnp-org:device:Basic:1",
+            "urn:samsung.com:device:RemoteControlReceiver:1",  // Samsung TVs
+            "urn:panasonic-com:device:p00RemoteController:1"   // Panasonic TVs
         )
     }
 
@@ -55,9 +62,14 @@ class SSDPDiscovery @Inject constructor(
                 broadcast = true
             }
             
-            // Send M-SEARCH for each target
-            for (target in SEARCH_TARGETS) {
-                sendMSearch(target)
+            // Send M-SEARCH for each target (multiple rounds for reliability)
+            repeat(3) { round ->
+                for (target in SEARCH_TARGETS) {
+                    sendMSearch(target)
+                }
+                if (round < 2) {
+                    Thread.sleep(500)  // Small delay between rounds
+                }
             }
             
             // Listen for responses
@@ -118,22 +130,47 @@ class SSDPDiscovery @Inject constructor(
     }
 
     private fun parseResponse(response: String, address: String): Device? {
-        if (!response.startsWith("HTTP/1.1 200") && !response.contains("NOTIFY")) {
+        // Accept both M-SEARCH responses and NOTIFY announcements
+        if (!response.startsWith("HTTP/1.1 200") && 
+            !response.contains("NOTIFY") &&
+            !response.contains("HTTP/1.1")) {
             return null
         }
         
         val headers = parseHeaders(response)
         val location = headers["location"] ?: return null
         val usn = headers["usn"] ?: location
+        val server = headers["server"] ?: ""
+        val st = headers["st"] ?: headers["nt"] ?: ""
+        
+        // Skip non-rendering devices if we can tell
+        if (st.contains("ContentDirectory") || st.contains("ConnectionManager")) {
+            return null  // These are media servers, not renderers
+        }
         
         // Create a basic device - we'll fetch more details from the location URL
         return Device(
             id = usn.hashCode().toString(),
-            name = "Unknown Device",
+            name = extractNameFromServer(server),
             type = DeviceType.DLNA,
             address = address,
-            controlUrl = location
+            controlUrl = location,
+            modelName = server.takeIf { it.isNotEmpty() }
         )
+    }
+    
+    private fun extractNameFromServer(server: String): String {
+        // Try to extract a friendly name from the server header
+        return when {
+            server.contains("Samsung", ignoreCase = true) -> "Samsung TV"
+            server.contains("LG", ignoreCase = true) -> "LG TV"
+            server.contains("Sony", ignoreCase = true) -> "Sony TV"
+            server.contains("Roku", ignoreCase = true) -> "Roku"
+            server.contains("Fire", ignoreCase = true) -> "Fire TV"
+            server.contains("Chromecast", ignoreCase = true) -> "Chromecast"
+            server.isNotEmpty() -> server.take(30)
+            else -> "Unknown Device"
+        }
     }
 
     private fun parseHeaders(response: String): Map<String, String> {
