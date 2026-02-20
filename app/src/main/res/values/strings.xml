@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Screencast</string>
+    <string name="start_casting">Start Casting</string>
+    <string name="stop_casting">Stop Casting</string>
+    <string name="searching">Searching for devices…</string>
+    <string name="no_devices">No devices found</string>
+    <string name="connected_to">Connected to %s</string>
+    <string name="notification_channel_name">Screen Casting</string>
+    <string name="notification_casting">Casting screen to %s</string>
+</resources>
