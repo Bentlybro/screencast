@@ -7,8 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.projection.MediaProjection
-import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -21,6 +19,9 @@ import dagger.hilt.android.AndroidEntryPoint
  * 
  * Android requires MediaProjection to run in a foreground service with
  * a visible notification so users know their screen is being captured.
+ * 
+ * Note: The actual capture logic is handled by CastManager. This service
+ * just maintains the foreground notification required by Android.
  */
 @AndroidEntryPoint
 class ScreenCaptureService : Service() {
@@ -28,16 +29,32 @@ class ScreenCaptureService : Service() {
     companion object {
         const val ACTION_START = "com.screencast.START_CAPTURE"
         const val ACTION_STOP = "com.screencast.STOP_CAPTURE"
-        const val EXTRA_RESULT_CODE = "result_code"
-        const val EXTRA_RESULT_DATA = "result_data"
         const val EXTRA_DEVICE_NAME = "device_name"
         
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "screen_capture"
+        
+        fun startService(context: Context, deviceName: String) {
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_DEVICE_NAME, deviceName)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+        
+        fun stopService(context: Context) {
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                action = ACTION_STOP
+            }
+            context.startService(intent)
+        }
     }
 
-    private var mediaProjection: MediaProjection? = null
-    private var isCapturing = false
+    private var isRunning = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -49,46 +66,27 @@ class ScreenCaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
-                val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
                 val deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME) ?: "device"
-                
-                if (resultCode != -1 && resultData != null) {
-                    startCapture(resultCode, resultData, deviceName)
-                }
+                startForegroundNotification(deviceName)
             }
             ACTION_STOP -> {
-                stopCapture()
+                stopSelf()
             }
         }
         return START_STICKY
     }
 
-    private fun startCapture(resultCode: Int, resultData: Intent, deviceName: String) {
+    private fun startForegroundNotification(deviceName: String) {
+        if (isRunning) return
+        isRunning = true
+        
         val notification = createNotification(deviceName)
         startForeground(NOTIFICATION_ID, notification)
-        
-        val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
-        
-        mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() {
-                stopCapture()
-            }
-        }, null)
-        
-        isCapturing = true
-        
-        // TODO: Set up VirtualDisplay and start encoding
-        // This will be implemented in the capture module
     }
 
-    private fun stopCapture() {
-        isCapturing = false
-        mediaProjection?.stop()
-        mediaProjection = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+    override fun onDestroy() {
+        isRunning = false
+        super.onDestroy()
     }
 
     private fun createNotificationChannel() {
@@ -131,8 +129,4 @@ class ScreenCaptureService : Service() {
             .build()
     }
 
-    override fun onDestroy() {
-        stopCapture()
-        super.onDestroy()
-    }
 }
