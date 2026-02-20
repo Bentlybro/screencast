@@ -140,17 +140,6 @@ fun SettingsScreen(
             }
             
             Spacer(modifier = Modifier.height(32.dp))
-            
-            // Footer
-            Text(
-                text = "Made with ❤️ for Colton",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .wrapContentWidth(Alignment.CenterHorizontally)
-            )
         }
     }
 }

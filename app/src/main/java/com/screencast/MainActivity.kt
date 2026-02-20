@@ -1,7 +1,6 @@
 package com.screencast
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.core.content.ContextCompat
 import com.screencast.ui.ScreencastApp
 import com.screencast.ui.theme.ScreencastTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -20,23 +18,15 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* We don't need to handle the result specifically */ }
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { /* Permissions handled */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Request notification permission for Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
+        // Request ALL permissions at once on startup
+        requestAllPermissions()
         
         enableEdgeToEdge()
         setContent {
@@ -49,5 +39,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    
+    private fun requestAllPermissions() {
+        val permissions = buildList {
+            // Location for WiFi P2P / Miracast discovery
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            
+            // Notifications for Android 13+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        }
+        
+        permissionLauncher.launch(permissions.toTypedArray())
     }
 }
