@@ -7,6 +7,8 @@ import android.media.projection.MediaProjectionManager
 import android.util.Log
 import com.screencast.capture.ScreenCapture
 import com.screencast.casting.dlna.DLNAController
+import com.screencast.data.SettingsRepository
+import com.screencast.discovery.CombinedDiscovery
 import com.screencast.model.Device
 import com.screencast.model.DeviceType
 import com.screencast.streaming.StreamingServer
@@ -15,6 +17,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,7 +29,9 @@ import javax.inject.Singleton
 @Singleton
 class CastManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val dlnaController: DLNAController
+    private val dlnaController: DLNAController,
+    private val combinedDiscovery: CombinedDiscovery,
+    private val settingsRepository: SettingsRepository
 ) {
     companion object {
         private const val TAG = "CastManager"
@@ -38,6 +43,7 @@ class CastManager @Inject constructor(
     private var screenCapture: ScreenCapture? = null
     private var streamingServer: StreamingServer? = null
     private var targetDevice: Device? = null
+    private var mediaProjection: MediaProjection? = null
     
     private val _castState = MutableStateFlow<CastState>(CastState.Idle)
     val castState: StateFlow<CastState> = _castState.asStateFlow()
@@ -68,7 +74,7 @@ class CastManager @Inject constructor(
             
             // Get MediaProjection
             val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            val mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
+            mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
             
             if (mediaProjection == null) {
                 _castState.value = CastState.Error("Failed to get screen capture permission")
@@ -76,25 +82,37 @@ class CastManager @Inject constructor(
                 return false
             }
 
-            // Start streaming server
-            streamingServer = StreamingServer(STREAM_PORT).apply {
-                start()
+            // Get quality settings
+            val quality = settingsRepository.quality.first()
+
+            // Start streaming server (needed for DLNA)
+            if (device.type == DeviceType.DLNA) {
+                streamingServer = StreamingServer(STREAM_PORT).apply {
+                    start()
+                }
             }
-            val streamUrl = streamingServer!!.getStreamUrl()
+            val streamUrl = streamingServer?.getStreamUrl()
             Log.d(TAG, "Stream URL: $streamUrl")
 
-            // Start screen capture
-            screenCapture = ScreenCapture(context, mediaProjection).apply {
-                configure()
+            // Start screen capture with quality settings
+            screenCapture = ScreenCapture(context, mediaProjection!!).apply {
+                configure(
+                    width = quality.width,
+                    height = quality.height,
+                    bitrate = quality.bitrate,
+                    fps = 30
+                )
                 start()
             }
 
             // Connect encoded frames to streaming server
-            streamingServer!!.setFrameSource(screenCapture!!.encodedFrames)
+            if (streamingServer != null) {
+                streamingServer!!.setFrameSource(screenCapture!!.encodedFrames)
+            }
 
             // Tell the device to play our stream
             val connected = when (device.type) {
-                DeviceType.DLNA -> connectDLNA(device, streamUrl)
+                DeviceType.DLNA -> connectDLNA(device, streamUrl!!)
                 DeviceType.MIRACAST -> connectMiracast(device)
                 DeviceType.CHROMECAST -> connectChromecast(device, streamUrl)
                 else -> {
@@ -104,7 +122,7 @@ class CastManager @Inject constructor(
             }
 
             if (connected) {
-                _castState.value = CastState.Casting(device, streamUrl)
+                _castState.value = CastState.Casting(device, streamUrl ?: "miracast://${device.address}")
                 
                 // Start monitoring connection
                 startConnectionMonitor(device)
@@ -131,6 +149,9 @@ class CastManager @Inject constructor(
             targetDevice?.let { device ->
                 when (device.type) {
                     DeviceType.DLNA -> dlnaController.stop(device)
+                    DeviceType.MIRACAST -> {
+                        combinedDiscovery.disconnectMiracast { }
+                    }
                     else -> { /* TODO: Handle other types */ }
                 }
             }
@@ -142,6 +163,8 @@ class CastManager @Inject constructor(
         
         streamingServer?.stop()
         streamingServer = null
+        
+        mediaProjection = null
         
         // Stop foreground service
         com.screencast.capture.ScreenCaptureService.stopService(context)
@@ -173,13 +196,19 @@ class CastManager @Inject constructor(
     }
 
     private suspend fun connectMiracast(device: Device): Boolean {
-        // TODO: Implement Miracast connection
-        // This requires WiFi P2P and is more complex
-        Log.w(TAG, "Miracast not yet implemented")
-        return false
+        return suspendCancellableCoroutine { continuation ->
+            combinedDiscovery.connectMiracast(device) { success ->
+                if (success) {
+                    Log.d(TAG, "Miracast connection initiated")
+                    // For Miracast, the actual connection happens after P2P negotiation
+                    // The system handles the display sink setup
+                }
+                continuation.resume(success) {}
+            }
+        }
     }
 
-    private suspend fun connectChromecast(device: Device, streamUrl: String): Boolean {
+    private suspend fun connectChromecast(device: Device, streamUrl: String?): Boolean {
         // TODO: Implement Chromecast connection
         // This requires Google Cast SDK
         Log.w(TAG, "Chromecast not yet implemented")
@@ -194,10 +223,13 @@ class CastManager @Inject constructor(
                 when (device.type) {
                     DeviceType.DLNA -> {
                         val info = dlnaController.getTransportInfo(device)
-                        if (info == null || info.state == com.screencast.casting.dlna.TransportState.STOPPED) {
-                            Log.d(TAG, "Device stopped playback")
-                            // Don't auto-stop, device might just be buffering
+                        if (info == null) {
+                            Log.w(TAG, "Lost connection to device")
                         }
+                    }
+                    DeviceType.MIRACAST -> {
+                        // Miracast connection is managed by the system
+                        // We'd need to monitor WifiP2pManager connection state
                     }
                     else -> { /* TODO */ }
                 }

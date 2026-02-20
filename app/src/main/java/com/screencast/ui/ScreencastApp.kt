@@ -2,8 +2,8 @@ package com.screencast.ui
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
@@ -17,11 +17,18 @@ import androidx.navigation.navArgument
 import com.screencast.model.Device
 import com.screencast.model.DeviceType
 import com.screencast.ui.screens.*
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
-    data object Casting : Screen("casting/{deviceId}/{deviceName}/{deviceType}/{deviceAddress}") {
-        fun createRoute(device: Device) = "casting/${device.id}/${device.name}/${device.type.name}/${device.address}"
+    data object Casting : Screen("casting?id={id}&name={name}&type={type}&address={address}&controlUrl={controlUrl}&model={model}") {
+        fun createRoute(device: Device): String {
+            val encodedName = URLEncoder.encode(device.name, "UTF-8")
+            val encodedControlUrl = URLEncoder.encode(device.controlUrl ?: "", "UTF-8")
+            val encodedModel = URLEncoder.encode(device.modelName ?: "", "UTF-8")
+            return "casting?id=${device.id}&name=$encodedName&type=${device.type.name}&address=${device.address}&controlUrl=$encodedControlUrl&model=$encodedModel"
+        }
     }
     data object Settings : Screen("settings")
 }
@@ -49,24 +56,27 @@ fun ScreencastApp() {
         composable(
             route = Screen.Casting.route,
             arguments = listOf(
-                navArgument("deviceId") { type = NavType.StringType },
-                navArgument("deviceName") { type = NavType.StringType },
-                navArgument("deviceType") { type = NavType.StringType },
-                navArgument("deviceAddress") { type = NavType.StringType }
+                navArgument("id") { type = NavType.StringType; defaultValue = "" },
+                navArgument("name") { type = NavType.StringType; defaultValue = "Unknown" },
+                navArgument("type") { type = NavType.StringType; defaultValue = "DLNA" },
+                navArgument("address") { type = NavType.StringType; defaultValue = "" },
+                navArgument("controlUrl") { type = NavType.StringType; defaultValue = "" },
+                navArgument("model") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStackEntry ->
-            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
-            val deviceName = backStackEntry.arguments?.getString("deviceName") ?: "Unknown"
-            val deviceType = backStackEntry.arguments?.getString("deviceType")?.let { 
-                DeviceType.valueOf(it) 
-            } ?: DeviceType.DLNA
-            val deviceAddress = backStackEntry.arguments?.getString("deviceAddress") ?: ""
+            val args = backStackEntry.arguments ?: return@composable
             
             val device = Device(
-                id = deviceId,
-                name = deviceName,
-                type = deviceType,
-                address = deviceAddress
+                id = args.getString("id") ?: "",
+                name = URLDecoder.decode(args.getString("name") ?: "Unknown", "UTF-8"),
+                type = try {
+                    DeviceType.valueOf(args.getString("type") ?: "DLNA")
+                } catch (e: Exception) {
+                    DeviceType.DLNA
+                },
+                address = args.getString("address") ?: "",
+                controlUrl = URLDecoder.decode(args.getString("controlUrl") ?: "", "UTF-8").takeIf { it.isNotEmpty() },
+                modelName = URLDecoder.decode(args.getString("model") ?: "", "UTF-8").takeIf { it.isNotEmpty() }
             )
             
             val viewModel: CastingViewModel = hiltViewModel()

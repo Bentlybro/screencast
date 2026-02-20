@@ -1,5 +1,9 @@
 package com.screencast.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,6 +32,30 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    
+    // Permission launcher for WiFi P2P (Miracast)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            viewModel.onPermissionsGranted()
+        } else {
+            viewModel.onPermissionsDenied()
+        }
+    }
+    
+    // Request permissions on first launch
+    LaunchedEffect(Unit) {
+        val permissions = buildList {
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        }
+        permissionLauncher.launch(permissions.toTypedArray())
+    }
     
     Scaffold(
         topBar = {
@@ -81,13 +110,21 @@ private fun SearchingContent() {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Looking for DLNA TVs and Miracast displays",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
 private fun EmptyContent(onRefresh: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -105,12 +142,15 @@ private fun EmptyContent(onRefresh: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Make sure your TV is on and connected to the same network",
+            text = "Make sure your TV is on and connected to the same network, or has Miracast/WiFi Direct enabled",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onRefresh) {
+            Icon(Icons.Default.Refresh, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
             Text("Try Again")
         }
     }
@@ -141,11 +181,42 @@ private fun DeviceList(
             }
         }
         
-        items(devices, key = { it.id }) { device ->
-            DeviceCard(
-                device = device,
-                onClick = { onDeviceClick(device) }
-            )
+        // Group devices by type
+        val dlnaDevices = devices.filter { it.type == DeviceType.DLNA }
+        val miracastDevices = devices.filter { it.type == DeviceType.MIRACAST }
+        
+        if (dlnaDevices.isNotEmpty()) {
+            item {
+                Text(
+                    text = "DLNA / Smart TVs",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+            items(dlnaDevices, key = { it.id }) { device ->
+                DeviceCard(
+                    device = device,
+                    onClick = { onDeviceClick(device) }
+                )
+            }
+        }
+        
+        if (miracastDevices.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Miracast / WiFi Direct",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                )
+            }
+            items(miracastDevices, key = { it.id }) { device ->
+                DeviceCard(
+                    device = device,
+                    onClick = { onDeviceClick(device) }
+                )
+            }
         }
     }
 }
@@ -177,7 +248,11 @@ private fun DeviceCard(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = when (device.type) {
+                    DeviceType.DLNA -> MaterialTheme.colorScheme.primary
+                    DeviceType.MIRACAST -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.secondary
+                }
             )
             
             Spacer(modifier = Modifier.width(16.dp))
@@ -201,7 +276,11 @@ private fun DeviceCard(
                 Text(
                     text = device.type.name,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = when (device.type) {
+                        DeviceType.DLNA -> MaterialTheme.colorScheme.primary
+                        DeviceType.MIRACAST -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.secondary
+                    }
                 )
             }
             
