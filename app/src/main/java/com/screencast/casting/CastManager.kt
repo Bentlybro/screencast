@@ -72,7 +72,13 @@ class CastManager @Inject constructor(
 
         return try {
             // Start foreground service for notification
+            // IMPORTANT: On Android 14+, the foreground service MUST be started and
+            // startForeground() MUST complete BEFORE getMediaProjection() is called.
             com.screencast.capture.ScreenCaptureService.startService(context, device.name)
+            
+            // Wait for service to start (required on Android 14+)
+            // The service needs time to call startForeground() before we can get MediaProjection
+            delay(500)
             
             // Get MediaProjection
             val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
