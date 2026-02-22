@@ -8,6 +8,7 @@ import android.util.Log
 import com.screencast.capture.ScreenCapture
 import com.screencast.casting.chromecast.ChromecastController
 import com.screencast.casting.dlna.DLNAController
+import com.screencast.casting.miracast.MiracastSource
 import com.screencast.data.SettingsRepository
 import com.screencast.discovery.CombinedDiscovery
 import com.screencast.model.Device
@@ -44,6 +45,7 @@ class CastManager @Inject constructor(
     
     private var screenCapture: ScreenCapture? = null
     private var streamingServer: StreamingServer? = null
+    private var miracastSource: MiracastSource? = null
     private var targetDevice: Device? = null
     private var mediaProjection: MediaProjection? = null
     
@@ -158,6 +160,8 @@ class CastManager @Inject constructor(
                 when (device.type) {
                     DeviceType.DLNA -> dlnaController.stop(device)
                     DeviceType.MIRACAST -> {
+                        miracastSource?.stop()
+                        miracastSource = null
                         combinedDiscovery.disconnectMiracast { }
                     }
                     DeviceType.CHROMECAST -> {
@@ -208,16 +212,44 @@ class CastManager @Inject constructor(
     }
 
     private suspend fun connectMiracast(device: Device): Boolean {
-        return suspendCancellableCoroutine { continuation ->
+        // Step 1: Establish WiFi Direct P2P connection
+        val p2pConnected = suspendCancellableCoroutine { continuation ->
             combinedDiscovery.connectMiracast(device) { success ->
-                if (success) {
-                    Log.d(TAG, "Miracast connection initiated")
-                    // For Miracast, the actual connection happens after P2P negotiation
-                    // The system handles the display sink setup
-                }
+                Log.d(TAG, "P2P connection result: $success")
                 continuation.resume(success) {}
             }
         }
+        
+        if (!p2pConnected) {
+            Log.e(TAG, "Failed to establish P2P connection")
+            return false
+        }
+        
+        // Wait for P2P connection to stabilize
+        delay(2000)
+        
+        // Step 2: Start Miracast source (RTSP server + RTP streaming)
+        miracastSource = MiracastSource(device.address)
+        if (!miracastSource!!.start()) {
+            Log.e(TAG, "Failed to start Miracast source")
+            return false
+        }
+        
+        Log.d(TAG, "Miracast RTSP server started, waiting for sink to connect...")
+        
+        // Step 3: Stream video frames to the sink
+        scope.launch {
+            try {
+                screenCapture?.let { capture ->
+                    miracastSource?.streamFrames(capture.encodedFrames)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Miracast streaming error", e)
+            }
+        }
+        
+        Log.d(TAG, "Miracast connection established")
+        return true
     }
 
     private suspend fun connectChromecast(device: Device, streamUrl: String?): Boolean {
