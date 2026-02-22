@@ -46,7 +46,7 @@ class MiracastSource(
     private val ssrc = (System.currentTimeMillis() and 0xFFFFFFFF).toInt()
     
     private var sinkRtpPort: Int = RTP_PORT_BASE
-    private var sinkAddress: InetAddress? = null
+    private var sinkInetAddress: InetAddress? = null
 
     /**
      * Start the Miracast source.
@@ -83,7 +83,7 @@ class MiracastSource(
             rtspClient = rtspServer?.accept()
             Log.d(TAG, "Sink connected from ${rtspClient?.inetAddress}")
             
-            sinkAddress = rtspClient?.inetAddress
+            sinkInetAddress = rtspClient?.inetAddress
             
             // Handle RTSP session
             handleRtspSession(rtspClient!!)
@@ -253,7 +253,7 @@ class MiracastSource(
      * Frames should be H.264 NAL units wrapped in MPEG2-TS.
      */
     fun sendFrame(frame: EncodedFrame) {
-        if (!isRunning.get() || sinkAddress == null) return
+        if (!isRunning.get() || sinkInetAddress == null) return
         
         try {
             // Wrap H.264 in RTP packet
@@ -262,7 +262,7 @@ class MiracastSource(
             val packet = DatagramPacket(
                 rtpPacket,
                 rtpPacket.size,
-                sinkAddress,
+                sinkInetAddress,
                 sinkRtpPort
             )
             
