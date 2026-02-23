@@ -2,73 +2,67 @@
 
 Free, open-source Android screen mirroring to TVs and projectors. No ads, no subscriptions.
 
+[![Latest Release](https://img.shields.io/github/v/release/Bentlybro/screencast)](https://github.com/Bentlybro/screencast/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 ## Why?
 
 Existing apps charge subscriptions for functionality that should be free. The underlying protocols (DLNA, Miracast, Chromecast) are open — there's no reason to paywall basic screen sharing.
 
 ## Features
 
-**Core:**
-- Mirror Android screen to smart TVs and projectors
-- Support multiple casting protocols for maximum compatibility
-- Clean, simple UI — tap a device, start casting
-- Audio passthrough where supported
+- **Multi-protocol support** — DLNA, Miracast, and Chromecast all work out of the box
+- **Zero configuration** — tap a device, start casting
+- **Quality controls** — adjust resolution and bitrate to match your network
+- **OTA updates** — automatic update checks via GitHub Releases
+- **No bullshit** — no ads, no tracking, no analytics, no subscriptions
 
-**Protocols (priority order):**
-1. **DLNA/UPnP** — Widest compatibility, most smart TVs support this
-2. **Miracast** — WiFi Direct, no router needed
-3. **Chromecast** — Google Cast SDK for Chromecast/Android TV devices
-4. **Roku** — External Control Protocol (if time permits)
+## Supported Protocols
 
-**Technical:**
-- OTA updates built-in from day one
-- Minimal permissions — only what's needed
-- No analytics, no tracking, no bullshit
+| Protocol | Compatibility | Notes |
+|----------|---------------|-------|
+| **DLNA/UPnP** | Most smart TVs | Widest compatibility |
+| **Miracast** | WiFi Direct devices | No router needed |
+| **Chromecast** | Chromecast, Android TV | Reverse-engineered Cast v2 |
+
+## Download
+
+Get the latest APK from [GitHub Releases](https://github.com/Bentlybro/screencast/releases).
 
 ## Tech Stack
 
 - **Language:** Kotlin
 - **UI:** Jetpack Compose + Material 3
-- **Min SDK:** 24 (Android 7.0) — covers 95%+ of devices
+- **DI:** Hilt
+- **Min SDK:** 24 (Android 7.0)
 - **Target SDK:** 34 (Android 14)
-- **Build:** Gradle with Kotlin DSL
 
 ## Architecture
 
 ```
-app/
-├── ui/                    # Compose UI
-│   ├── screens/
-│   │   ├── HomeScreen     # Device discovery + list
-│   │   ├── CastingScreen  # Active casting view
-│   │   └── SettingsScreen
-│   └── components/
-├── casting/               # Casting implementations
-│   ├── CastManager        # Unified interface
-│   ├── dlna/              # DLNA/UPnP implementation
-│   ├── miracast/          # Miracast/WiFi Direct
-│   └── chromecast/        # Google Cast SDK
-├── capture/               # Screen capture
-│   ├── ScreenCapture      # MediaProjection wrapper
-│   └── Encoder            # H.264 encoding
-├── discovery/             # Device discovery
-│   ├── DeviceDiscovery    # Unified discovery
-│   ├── SSDPDiscovery      # DLNA device discovery
-│   └── WifiP2pDiscovery   # Miracast discovery
-├── update/                # OTA updates
-│   └── UpdateManager      # Check + install updates
-└── di/                    # Dependency injection (Hilt)
+app/src/main/java/com/screencast/
+├── ui/
+│   ├── screens/          # Home, Casting, Settings
+│   └── theme/            # Material 3 theming
+├── casting/
+│   ├── CastManager       # Unified casting interface
+│   ├── dlna/             # DLNA/UPnP controller
+│   ├── miracast/         # Miracast RTSP/RTP streaming
+│   └── chromecast/       # Cast v2 protocol
+├── capture/
+│   ├── ScreenCapture     # MediaProjection wrapper
+│   └── VideoEncoder      # H.264 encoding via MediaCodec
+├── discovery/
+│   ├── CombinedDiscovery # Unified device discovery
+│   ├── SSDPDiscovery     # DLNA discovery (UDP 1900)
+│   ├── MiracastDiscovery # WiFi P2P discovery
+│   └── ChromecastDiscovery # mDNS discovery
+├── streaming/
+│   └── StreamingServer   # HTTP server for DLNA
+├── update/
+│   └── UpdateManager     # GitHub-based OTA updates
+└── di/                   # Hilt modules
 ```
-
-## Key Android APIs
-
-| Feature | API |
-|---------|-----|
-| Screen capture | `MediaProjection` |
-| Video encoding | `MediaCodec` (H.264) |
-| DLNA discovery | SSDP multicast (UDP 1900) |
-| Miracast | `WifiP2pManager` |
-| Chromecast | Google Cast SDK |
 
 ## Permissions
 
@@ -77,63 +71,27 @@ app/
 <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 ```
 
-## OTA Update Strategy
-
-Using GitHub Releases as the update source:
-1. App checks `https://api.github.com/repos/OWNER/screencast/releases/latest` on launch
-2. Compares version code with installed version
-3. If newer, prompts user to update
-4. Downloads APK and triggers install via `ACTION_INSTALL_PACKAGE`
-
-Simple, no backend needed, fully transparent.
-
-## Roadmap
-
-### Phase 1: MVP (DLNA)
-- [ ] Project setup (Gradle, Compose, Hilt)
-- [ ] Basic UI: device list + casting screen
-- [ ] SSDP device discovery
-- [ ] MediaProjection screen capture
-- [ ] H.264 encoding with MediaCodec
-- [ ] DLNA streaming (HTTP server + UPnP control)
-- [ ] OTA update system
-- [ ] First release
-
-### Phase 2: Miracast
-- [ ] WiFi P2P discovery
-- [ ] Miracast session establishment
-- [ ] HDCP handling (if needed)
-
-### Phase 3: Chromecast
-- [ ] Google Cast SDK integration
-- [ ] Chromecast device discovery
-- [ ] Cast session management
-
-### Phase 4: Polish
-- [ ] Quality settings (resolution, bitrate)
-- [ ] Latency optimization
-- [ ] Battery optimization
-- [ ] Roku support (stretch goal)
-
-## Development
+## Building
 
 ```bash
-# Clone
 git clone https://github.com/Bentlybro/screencast.git
 cd screencast
-
-# Open in Android Studio
-# Build → Run on device
-
-# Or command line
 ./gradlew assembleDebug
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Or open in Android Studio and run directly.
+
+## Contributing
+
+PRs welcome. Keep it simple — this is meant to be a lean, focused app.
 
 ## License
 
